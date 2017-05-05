@@ -130,3 +130,4 @@ ENV/
 
 tags*
 .direnv/
+client_secret.json
