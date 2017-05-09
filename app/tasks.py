@@ -57,7 +57,7 @@ def fetch_messages(client_id, page_token=None):
     messages = result['messages']
 
     db_messages = db.messages.find({"message_id": {"$in": [message['id'] for message in messages]}}) 
-    db_message_ids = [db_message['client_id'] for db_message in db_messages]
+    db_message_ids = [db_message['message_id'] for db_message in db_messages]
     to_insert_messages = [message for message in messages if not message['id'] in db_message_ids]
 
     if result.get('nextPageToken', None):
