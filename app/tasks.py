@@ -19,20 +19,21 @@ def download_attachment(client_id, message_id, attachment_id):
     http = google_credentials(client_id)
     service = discovery.build('gmail', 'v1', http=http)
     attachment = service.users().messages().attachments().get(userId='me', messageId=message_id, id=attachment_id).execute()
-    db.attachments.insert_one({
-        'client_id': client_id,
-        'attachment_id': attachment_id,
-        'data': attachment['data'],
-        'size': attachment['size'],
+    db.attachments.update_one({
+            'client_id': client_id,
+            'attachment_id': attachment_id,
+        }, {
+            'data': attachment['data'],
+            'size': attachment['size'],
     })
 
 @app.task
-def fetch_messages(client_id):
+def fetch_messages(client_id, page_token=None):
     def download_message(request_id, response, exception):
         raw_html = raw_text = None
         if exception is not None:
             raise Exception("error during message downloading")
-        for part in response['payload']['parts']:
+        for part in response['payload'].get('parts', []):
             if part.get('filename', None):
                 if part['body'].get('attachmentId', None):
                     download_attachment.delay(client_id, response['id'], part['body']['attachmentId'])
@@ -52,11 +53,15 @@ def fetch_messages(client_id):
 
     http = google_credentials(client_id)
     service = discovery.build('gmail', 'v1', http=http)
-    messages = service.users().messages().list(userId='me').execute()['messages']
+    result = service.users().messages().list(userId='me', pageToken=page_token).execute()
+    messages = result['messages']
 
     db_messages = db.messages.find({"message_id": {"$in": [message['id'] for message in messages]}}) 
     db_message_ids = [db_message['client_id'] for db_message in db_messages]
     to_insert_messages = [message for message in messages if not message['id'] in db_message_ids]
+
+    if result.get('nextPageToken', None):
+        fetch_messages.delay(client_id, result['nextPageToken'])
 
     batch = service.new_batch_http_request(callback=download_message)
 

@@ -11,6 +11,7 @@ from pymongo import MongoClient
 
 app = flask.Flask(__name__)
 db = MongoClient('mongo', 27017).gmail_downloader
+PAGE_SIZE = 5
 
 
 @app.route('/')
@@ -19,13 +20,13 @@ def index():
 
 @app.route('/users/<client_id>/messages')
 def list_messages(client_id):
-    messages = db.messages.find({'client_id': client_id})
+    messages = db.messages.find({'client_id': client_id})[0:PAGE_SIZE]
     return flask.Response(bson.json_util.dumps(messages),
                            mimetype='application/json')
 
 @app.route('/users/<client_id>/attachments')
 def list_attachments(client_id):
-    attachments = db.attachments.find({'client_id': client_id})
+    attachments = db.attachments.find({'client_id': client_id})[0:PAGE_SIZE]
     return flask.Response(bson.json_util.dumps(attachments),
                            mimetype='application/json')
 @app.route('/oauth2callback')
