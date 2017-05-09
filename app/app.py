@@ -1,4 +1,5 @@
 import json
+import bson.json_util
 
 import flask
 import httplib2
@@ -9,8 +10,7 @@ from oauth2client import client
 from pymongo import MongoClient
 
 app = flask.Flask(__name__)
-mongo_client = MongoClient('mongo', 27017)
-db = mongo_client.gmail_downloader
+db = MongoClient('mongo', 27017).gmail_downloader
 
 
 @app.route('/')
@@ -19,19 +19,15 @@ def index():
 
 @app.route('/users/<client_id>/messages')
 def list_messages(client_id):
-    user_credentials = db.credentials.find({'client_id': client_id})
-    if not user_credentials:
-      return flask.redirect(flask.url_for('oauth2callback'))
-    credentials = client.OAuth2Credentials.from_json(json.dumps(user_credentials[0]['credentials']))
-    if credentials.access_token_expired:
-      return flask.redirect(flask.url_for('oauth2callback'))
-    else:
-      http = credentials.authorize(httplib2.Http())
-      service = discovery.build('gmail', 'v1', http=http)
+    messages = db.messages.find({'client_id': client_id})
+    return flask.Response(bson.json_util.dumps(messages),
+                           mimetype='application/json')
 
-    messages = service.users().messages().list(userId='me').execute()['messages']
-    return json.dumps(messages)
-
+@app.route('/users/<client_id>/attachments')
+def list_attachments(client_id):
+    attachments = db.attachments.find({'client_id': client_id})
+    return flask.Response(bson.json_util.dumps(attachments),
+                           mimetype='application/json')
 @app.route('/oauth2callback')
 def oauth2callback():
     flow = client.flow_from_clientsecrets(

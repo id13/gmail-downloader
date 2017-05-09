@@ -18,7 +18,7 @@ services:
     ports:
       - 5000:5000
     volumes: 
-      - ./app:/app
+      - ./app:/opt/app
     depends_on:
       - mongo
       - rabbitmq
@@ -26,3 +26,17 @@ services:
       - python
       - app.py
 
+  worker:
+    build: .
+    volumes:
+      - ./app:/opt/app
+    depends_on:
+      - mongo
+      - rabbitmq
+    working_dir: /opt
+    entrypoint:
+      - celery 
+      - "-A"
+      - app
+      - worker
+      - "--loglevel=info"
