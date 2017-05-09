@@ -2,12 +2,15 @@ from .celery import app
 import json
 import time
 import httplib2
+import os.path
 
 from apiclient import discovery
 from oauth2client import client
 
 from pymongo import MongoClient
 db = MongoClient('mongo', 27017).gmail_downloader
+AUTHORIZED_FILE_TYPES = ['.jpg', '.png', '.pdf', '.jpeg', '.ppt', '.pptx', '.doc', '.docx']
+MAX_FILE_SIZE = 8000000
 
 def google_credentials(client_id):
     user_credentials = db.credentials.find({'client_id': client_id})
@@ -15,17 +18,21 @@ def google_credentials(client_id):
     return credentials.authorize(httplib2.Http())
 
 @app.task
-def download_attachment(client_id, message_id, attachment_id):
+def download_attachment(client_id, message_id, attachment_id, filename, mime_type):
     http = google_credentials(client_id)
     service = discovery.build('gmail', 'v1', http=http)
     attachment = service.users().messages().attachments().get(userId='me', messageId=message_id, id=attachment_id).execute()
-    db.attachments.update_one({
+    db.attachments.update({
             'client_id': client_id,
             'attachment_id': attachment_id,
-        }, {
-            'data': attachment['data'],
-            'size': attachment['size'],
-    })
+        }, { "$set": {
+                'filename': filename,
+                'mime_type': mime_type,
+                'data': attachment['data'],
+                'size': attachment['size'],
+        }},
+        upsert=True,
+    )
 
 @app.task
 def fetch_messages(client_id, page_token=None):
@@ -34,9 +41,13 @@ def fetch_messages(client_id, page_token=None):
         if exception is not None:
             raise Exception("error during message downloading")
         for part in response['payload'].get('parts', []):
-            if part.get('filename', None):
-                if part['body'].get('attachmentId', None):
-                    download_attachment.delay(client_id, response['id'], part['body']['attachmentId'])
+            if part.get('filename', None) and (os.path.splitext(part['filename'])[1] or "").lower() in AUTHORIZED_FILE_TYPES:
+                if part['body'].get('attachmentId', None) and int(part['body']['size']) <= MAX_FILE_SIZE:
+                    download_attachment.delay(client_id,
+                                              response['id'],
+                                              part['body']['attachmentId'],
+                                              part['filename'],
+                                              part['mimeType'])
                 continue
             else:
                 if part['mimeType'] == 'text/html':
