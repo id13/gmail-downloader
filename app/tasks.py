@@ -2,6 +2,7 @@ from .celery import app
 import json
 import time
 import httplib2
+import base64
 import os.path
 from contextlib import contextmanager
 
@@ -63,10 +64,11 @@ def fetch_messages(client_id, page_token=None):
                                                   part['mimeType'])
                     continue
                 else:
+                    body = base64.urlsafe_b64decode(part['body'].get('data', '').encode('UTF-8')).decode('UTF-8')
                     if part['mimeType'] == 'text/html':
-                        raw_html = part
+                        raw_html = body
                     elif part['mimeType'] == 'text/plain':
-                        raw_text = part
+                        raw_text = body
             db.messages.insert_one({
                 'message_id': response['id'], 
                 'client_id': client_id,
