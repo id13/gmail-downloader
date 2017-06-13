@@ -1,9 +1,9 @@
 import json
-import bson.json_util
 
 import flask
 import httplib2
 
+from bson import json_util
 from apiclient import discovery
 from oauth2client import client
 
@@ -21,13 +21,13 @@ def index():
 @app.route('/users/<client_id>/messages')
 def list_messages(client_id):
     messages = db.messages.find({'client_id': client_id})[0:PAGE_SIZE]
-    return flask.Response(bson.json_util.dumps(messages),
+    return flask.Response(json.dumps(list(messages), default=json_util.default),
                            mimetype='application/json')
 
 @app.route('/users/<client_id>/attachments')
 def list_attachments(client_id):
     attachments = db.attachments.find({'client_id': client_id})[0:PAGE_SIZE]
-    return flask.Response(bson.json_util.dumps(attachments),
+    return flask.Response(json.dumps(list(attachments), default=json_util.default),
                            mimetype='application/json')
 @app.route('/oauth2callback')
 def oauth2callback():
