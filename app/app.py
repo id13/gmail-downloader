@@ -1,7 +1,9 @@
 import json
 
+import re
 import flask
 import httplib2
+import pandas as pd
 
 from bson import json_util
 from apiclient import discovery
@@ -13,10 +15,39 @@ app = flask.Flask(__name__)
 db = MongoClient('mongo', 27017).gmail_downloader
 PAGE_SIZE = 5
 
+def extract_relevant_data_message(message):
+    result = {'created': '', 'from': '', 'to': '', 'text': ''}
+    result['text'] = ""
+    for header in message['headers']:
+        if header['name'] == 'Date':
+            result['created'] = header['value']
+        elif header['name'] == 'From':
+            match = re.search(r'[\w\.-]+@[\w\.-]+', header['value'])
+            if match: result['from'] = match.group(0)
+            else: return None
+        elif header['name'] == 'To':
+            match = re.search(r'[\w\.-]+@[\w\.-]+', header['value'])
+            if match: result['to'] = match.group(0)
+            else: return None
+    match = re.search(r'(.|\n)*?(?=(.*[\w\.-]+@[\w\.-]+))', str(message['raw_text']))
+    if match: result['text'] = match.group(0)
+    else: return None
+    return result
+
 
 @app.route('/')
 def index():
     return "Hello world"
+
+@app.route('/users/<client_id>/messages.csv')
+def export_messages(client_id):
+    messages = db.messages.find({'client_id': client_id})
+    data = [tuple for tuple in list(map(extract_relevant_data_message, messages)) if tuple is not None]
+    df = pd.DataFrame(data)
+    response = flask.make_response(df.to_csv())
+    response.headers["Content-Disposition"] = "attachment; filename=export.csv"
+    response.headers["Content-Type"] = "text/csv"
+    return response
 
 @app.route('/users/<client_id>/messages')
 def list_messages(client_id):
